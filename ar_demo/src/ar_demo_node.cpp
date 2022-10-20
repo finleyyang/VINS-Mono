@@ -496,6 +496,8 @@ void pose_callback(const nav_msgs::Odometry::ConstPtr &pose_msg)
     //else
     //    ROS_WARN("image coming late");
 }
+
+
 int main( int argc, char** argv )
 {
     ros::init(argc, argv, "points_and_lines");

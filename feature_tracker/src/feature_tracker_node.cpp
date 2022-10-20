@@ -24,9 +24,13 @@ int pub_count = 1;
 bool first_image_flag = true;
 double last_image_time = 0;
 bool init_pub = 0;
-
+/*
+ *  主要功能 readImage()函数对新来的图像使用光流法进行特征点追踪，并将特征点封装成feature_points发布到pub_img的话题下，
+ *  将图像封装成ptr发布在pub_match下
+ */
 void img_callback(const sensor_msgs::ImageConstPtr &img_msg)
 {
+    //判断是否是第一帧
     if(first_image_flag)
     {
         first_image_flag = false;
@@ -35,6 +39,7 @@ void img_callback(const sensor_msgs::ImageConstPtr &img_msg)
         return;
     }
     // detect unstable camera stream
+    // 判断时间间隔是否正确，当前帧跟上一帧之间间隔超过1s，或者当前帧的时间戳小于上一帧的时间戳
     if (img_msg->header.stamp.toSec() - last_image_time > 1.0 || img_msg->header.stamp.toSec() < last_image_time)
     {
         ROS_WARN("image discontinue! reset the feature tracker!");
@@ -48,6 +53,7 @@ void img_callback(const sensor_msgs::ImageConstPtr &img_msg)
     }
     last_image_time = img_msg->header.stamp.toSec();
     // frequency control
+    //
     if (round(1.0 * pub_count / (img_msg->header.stamp.toSec() - first_image_time)) <= FREQ)
     {
         PUB_THIS_FRAME = true;
@@ -205,14 +211,19 @@ void img_callback(const sensor_msgs::ImageConstPtr &img_msg)
 
 int main(int argc, char **argv)
 {
+    //初始化ros和设置句柄，设置logger级别
     ros::init(argc, argv, "feature_tracker");
     ros::NodeHandle n("~");
     ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME, ros::console::levels::Info);
+
+    //读取配置文件中的参数
     readParameters(n);
 
+    //读取每一个相机的内参,NUM_OF_CAM=1为单目
     for (int i = 0; i < NUM_OF_CAM; i++)
         trackerData[i].readIntrinsicParameter(CAM_NAMES[i]);
 
+    //判断是否加入鱼眼mask来去除边缘噪声
     if(FISHEYE)
     {
         for (int i = 0; i < NUM_OF_CAM; i++)
@@ -228,11 +239,13 @@ int main(int argc, char **argv)
         }
     }
 
+    //订阅话题IMAGE_TOPIC，执行回调函数img_callback
     ros::Subscriber sub_img = n.subscribe(IMAGE_TOPIC, 100, img_callback);
 
-    pub_img = n.advertise<sensor_msgs::PointCloud>("feature", 1000);
-    pub_match = n.advertise<sensor_msgs::Image>("feature_img",1000);
-    pub_restart = n.advertise<std_msgs::Bool>("restart",1000);
+    //发布信息
+    pub_img = n.advertise<sensor_msgs::PointCloud>("feature", 1000);    //跟踪的特征点图像，主要是之后给RVIZ用和调试用
+    pub_match = n.advertise<sensor_msgs::Image>("feature_img",1000);    //即跟踪的特征点信息，由/vins_estimator订阅并进行优化
+    pub_restart = n.advertise<std_msgs::Bool>("restart",1000);      //判断特征跟踪模块是否出错，若有问题则进行复位，由/vins_estimator订阅
     /*
     if (SHOW_TRACK)
         cv::namedWindow("vis", cv::WINDOW_NORMAL);
